@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Olla Popular Naucalpan · v0.2</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;background:#10243b;color:#fff;font-family:system-ui,-apple-system,sans-serif;overflow-x:hidden}
+#wrap{max-width:1100px;margin:auto;padding:8px}.hud{display:grid;grid-template-columns:1.3fr repeat(4,1fr);gap:5px;margin-bottom:6px}
+.card{background:#0a3158;border:2px solid #79b8e8;border-radius:8px;padding:6px;text-align:center;font-weight:800;font-size:clamp(11px,2vw,16px)}
+.card b{font-size:1.25em}.gamebox{position:relative}canvas{width:100%;height:auto;border:3px solid #7bb9e7;border-radius:10px;display:block;touch-action:none;background:#b7a37e}
+#toast{position:absolute;top:12%;left:50%;transform:translateX(-50%);background:#fff;color:#172434;border:3px solid #172434;border-radius:10px;padding:8px 14px;font-weight:900;opacity:0;transition:.15s;pointer-events:none;text-align:center}
+.bottom{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:7px;margin-top:7px}.panel{background:#0a3158;border:2px solid #79b8e8;border-radius:9px;padding:7px;font-size:13px}
+.controls{display:flex;justify-content:center;gap:12px;align-items:center}.dpad{display:grid;grid-template-columns:46px 46px 46px;grid-template-rows:42px 42px;gap:3px}
+button{border:2px solid #fff;border-radius:10px;background:#276da3;color:#fff;font-weight:900;touch-action:none}.up{grid-column:2}.left{grid-column:1}.down{grid-column:2}.right{grid-column:3}.act{width:86px;height:86px;border-radius:50%;background:#c84d36}
+.bar{height:12px;background:#13263a;border:1px solid white;border-radius:7px;overflow:hidden}.fill{height:100%;background:#66c75b;width:0%}
+.shop button{padding:5px;margin:2px;font-size:11px;background:#194c73}.title{font-weight:900;color:#f5d263}.hint{text-align:center;font-size:12px;opacity:.8;margin-top:5px}
+@media(max-width:700px){.hud{grid-template-columns:repeat(3,1fr)}.bottom{grid-template-columns:1fr}.panel.shop{display:none}}
+</style></head>
+<body><div id="wrap">
+<div class="hud">
+ <div class="card">🍲 OLLA POPULAR<br><small>Naucalpan · Minas Palacio</small></div>
+ <div class="card">🍽️ <b id="served">0</b>/100<br><small>PLATOS</small></div>
+ <div class="card">🥘 <b id="food">12</b><br><small>PORCIONES</small></div>
+ <div class="card">💰 $<b id="fund">0</b><br><small>FONDO</small></div>
+ <div class="card">⭐ x<b id="streak">0</b><br><small>RACHA</small></div>
+</div>
+<div class="gamebox"><canvas id="g" width="1000" height="570"></canvas><div id="toast"></div></div>
+<div class="bottom">
+ <div class="panel"><div class="title">🫙 COOPERACIÓN VOLUNTARIA</div><div>$<b id="jar">0</b> / $250</div><div class="bar"><div id="jarbar" class="fill"></div></div><small>Acércate al bote y pulsa SERVIR para recogerlo.</small></div>
+ <div class="panel controls">
+  <div class="dpad"><button class="up" data-k="ArrowUp">▲</button><button class="left" data-k="ArrowLeft">◀</button><button class="down" data-k="ArrowDown">▼</button><button class="right" data-k="ArrowRight">▶</button></div>
+  <button class="act" id="act">SERVIR<br>🍲</button>
+ </div>
+ <div class="panel shop"><div class="title">MEJORAS</div><button onclick="buy('pot',800)">🍲 Olla grande $800</button><button onclick="buy('table',450)">🪑 Más mesas $450</button><button onclick="buy('jar',250)">🫙 Segundo bote $250</button><button onclick="buy('vol',600)">👥 Voluntario $600</button></div>
+</div>
+<div class="hint">Móvil: botones · PC: WASD/flechas + espacio · Atiende antes de 5 segundos para aumentar la posibilidad de cooperación.</div>
+</div>
+<script>
+const C=document.getElementById('g'),ctx=C.getContext('2d');
+let keys={}, P={x:470,y:420,r:14,plates:0}, served=0,food=12,fund=0,jar=0,streak=0,people=[], upgrades={pot:0,table:0,jar:0,vol:0},last=performance.now();
+const pot={x:255,y:205}, jarPos={x:760,y:360}, names=["Lupita","Carmen","José","Martha","Raúl","Sofi","Toño","Elena"];
+function toast(s){let e=document.getElementById('toast');e.innerHTML=s;e.style.opacity=1;clearTimeout(e.t);e.t=setTimeout(()=>e.style.opacity=0,1300)}
+function spawn(){if(people.length>=7+upgrades.table*2||served>=100)return; let side=Math.random()<.5?0:1;people.push({x:side?950:50,y:330+Math.random()*170,t:5,born:performance.now(),served:false,name:names[Math.floor(Math.random()*names.length)]})}
+setInterval(spawn,1500); for(let i=0;i<4;i++)spawn();
+function d(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function ui(){servedEl.textContent=served;foodEl.textContent=food;fundEl.textContent=fund;jarEl.textContent=jar;streakEl.textContent=streak;jarbar.style.width=Math.min(100,jar/250*100)+"%"}
+const servedEl=document.getElementById('served'),foodEl=document.getElementById('food'),fundEl=document.getElementById('fund'),jarEl=document.getElementById('jar'),streakEl=document.getElementById('streak'),jarbar=document.getElementById('jarbar');
+function action(){
+ if(d(P,pot)<75){let take=Math.min(food,5-P.plates);if(take>0){food-=take;P.plates+=take;toast("🥘 Tomaste "+take+" platos")}else toast(food<=0?"⚠️ No quedan porciones":"✋ Ya llevas 5 platos");ui();return}
+ if(d(P,jarPos)<70){if(jar){fund+=jar;toast("🫙 Recogiste $"+jar);jar=0;ui()}else toast("El bote está vacío");return}
+ let idx=people.findIndex(n=>!n.served&&d(P,n)<55);
+ if(idx>=0){
+   let n=people[idx]; if(P.plates<=0){toast("🍽️ Necesitas tomar platos en la olla");return}
+   P.plates--; served++; let secs=(performance.now()-n.born)/1000; n.served=true;
+   if(secs<=5){streak++; let chance=Math.min(.75,.28+streak*.035); if(Math.random()<chance){let vals=[5,10,20,20,50];let v=vals[Math.floor(Math.random()*vals.length)];jar=Math.min(250,jar+v);toast("⚡ "+secs.toFixed(1)+" s · Cooperación +$"+v)}else toast("⚡ "+secs.toFixed(1)+" s · ¡Servicio rápido!")}
+   else{streak=0;toast("🍲 Plato servido · "+secs.toFixed(1)+" s")}
+   setTimeout(()=>{people=people.filter(q=>q!==n)},900);ui(); if(served>=100)toast("🎉 ¡100 platos! Jornada completada"); return
+ }
+ toast("Acércate a una persona, la olla o el bote.")
+}
+function buy(k,c){if(fund<c){toast("Faltan $"+(c-fund));return}fund-=c;upgrades[k]++;toast("✅ Mejora adquirida");ui()}
+function R(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(x,y,w,h)} function circ(x,y,r,c){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=c;ctx.fill()}
+function draw(){
+ R(0,0,1000,570,"#c5b28b"); // street
+ // façades
+ R(0,0,1000,150,"#b86a4d");R(360,0,220,150,"#29a5ad");R(610,0,210,150,"#d99a68");R(830,0,170,150,"#a88d76");
+ for(let i=0;i<8;i++){R(i*130+15,45,70,85,"#254e67");R(i*130+28,62,44,24,"#8cc7d7")}
+ // wires
+ ctx.strokeStyle="#30343b";ctx.lineWidth=2;for(let i=0;i<5;i++){ctx.beginPath();ctx.moveTo(0,12+i*9);ctx.lineTo(1000,65+i*5);ctx.stroke()}
+ // red tents
+ for(let i=0;i<3;i++){let x=120+i*245;ctx.fillStyle="#d94539";ctx.beginPath();ctx.moveTo(x,190);ctx.lineTo(x+105,125);ctx.lineTo(x+215,190);ctx.fill();R(x,190,215,16,"#bd342d");R(x+10,200,7,210,"#e6e6e6");R(x+198,200,7,210,"#e6e6e6")}
+ // tables/stools
+ for(let i=0;i<3+upgrades.table;i++){let tx=360+(i%3)*170,ty=285+Math.floor(i/3)*100;R(tx,ty,145,34,"#eee9dd");for(let s=0;s<3;s++)circ(tx+25+s*45,ty+48,12,["#e5c43c","#30885d","#333"][s])}
+ // serving area/pot
+ R(175,220,175,48,"#805638");circ(pot.x,pot.y,42,"#777");circ(pot.x,pot.y,34,"#c24d2f");ctx.fillStyle="#eee";ctx.font="bold 14px sans-serif";ctx.fillText("SERVICIO",205,260);
+ // jar station
+ R(730,380,70,55,"#8b5d36");R(740,315,55,62,"#e9f2ee");ctx.strokeStyle="#fff";ctx.strokeRect(740,315,55,62);ctx.fillStyle="#fff";ctx.font="bold 11px sans-serif";ctx.fillText("COOPERACIÓN",718,300);ctx.fillText("VOLUNTARIA",724,312);
+ // people
+ people.forEach(n=>{circ(n.x,n.y,14,n.served?"#6d9b6a":"#d28b5c");circ(n.x,n.y-17,9,"#54372c");let left=Math.max(0,5-(performance.now()-n.born)/1000);if(!n.served){R(n.x-23,n.y-40,46,7,"#4b1f1f");R(n.x-23,n.y-40,46*(left/5),7,left>2?"#68c55b":"#e34b3f");ctx.fillStyle="#fff";ctx.font="10px sans-serif";ctx.fillText(n.name,n.x-18,n.y-47)}})
+ // player
+ circ(P.x,P.y,16,"#176aa3");circ(P.x,P.y-19,10,"#c9875e");ctx.fillStyle="#fff";ctx.font="bold 11px sans-serif";ctx.fillText("TÚ",P.x-7,P.y+4);ctx.fillText("🍽️"+P.plates,P.x-13,P.y+34);
+}
+function loop(t){let sp=3.6+(upgrades.vol*.2),dx=0,dy=0;if(keys.ArrowLeft||keys.a)dx--;if(keys.ArrowRight||keys.d)dx++;if(keys.ArrowUp||keys.w)dy--;if(keys.ArrowDown||keys.s)dy++;if(dx&&dy){dx*=.707;dy*=.707}P.x=Math.max(18,Math.min(982,P.x+dx*sp));P.y=Math.max(170,Math.min(550,P.y+dy*sp));draw();requestAnimationFrame(loop)}
+addEventListener("keydown",e=>{keys[e.key]=true;if(e.code==="Space"){e.preventDefault();action()}});addEventListener("keyup",e=>keys[e.key]=false);
+document.querySelectorAll("[data-k]").forEach(b=>{let k=b.dataset.k;b.onpointerdown=e=>{e.preventDefault();keys[k]=true};b.onpointerup=b.onpointercancel=b.onpointerleave=e=>{keys[k]=false}});
+document.getElementById("act").onpointerdown=e=>{e.preventDefault();action()};ui();requestAnimationFrame(loop);
+</script></body></html>
